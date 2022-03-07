@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+message Empty {}
+
+service Repository {
+    rpc Albums(Empty) returns (stream AlbumReturns);
+}
+
+message AlbumReturns {
+    repeated Album albums = 1;
+}
+
+message TrackMetadata {
+    optional string trackName = 1;
+    repeated string trackArtistNames = 2;
+    optional string albumName = 3;
+    optional string albumArtistName = 4;
+    optional int32 trackNumber = 5;
+    optional int32 albumLength = 6;
+    optional int32 year = 7;
+    optional string genre = 8;
+    optional string authorName = 9;
+    optional string writerName = 10;
+    optional int32 discNumber = 11;
+    optional string mimeType = 12;
+    optional int32 trackDuration = 13;
+    optional int32 bitrate = 14;
+    repeated uint32 albumArt = 15;
+    optional string filePath = 16;
+}
+
+message Track {
+    TrackMetadata metadata = 1;
+    string name = 2;
+    repeated string artists = 3;
+}
+
+message Album {
+    string title = 1;
+    repeated string artists = 2;
+    repeated Track tracks = 3;
+    repeated uint32 albumArt = 4;
+}

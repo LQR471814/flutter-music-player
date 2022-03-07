@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 class IconAsset {
@@ -21,6 +21,7 @@ class AssetIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return SvgPicture.asset(
       asset,
+      color: Theme.of(context).primaryColor,
       width: width,
       height: height,
     );
