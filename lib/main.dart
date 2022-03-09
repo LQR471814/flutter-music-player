@@ -23,6 +23,10 @@ class Home extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.dark,
         shadowColor: const Color.fromARGB(40, 20, 20, 20),
+        colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: const Color.fromARGB(255, 217, 74, 61),
+              brightness: Brightness.dark,
+            ),
         // primaryColorLight: const Color.fromARGB(200, 200, 200, 255),
         // primaryColorDark: const Color.fromARGB(199, 169, 255, 157),
         fontFamily: 'Calibri',
@@ -33,15 +37,84 @@ class Home extends StatelessWidget {
           ),
         ),
       ),
-      home: const Scaffold(
-        body: LibraryRenderer(),
+      home: Scaffold(
+        body: Column(
+          children: [
+            const Player(),
+            Expanded(
+              child: LibraryRenderer(
+                onPlay: (track) => print(track),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class Player extends StatefulWidget {
+  const Player({Key? key}) : super(key: key);
+
+  @override
+  State<Player> createState() => _PlayerState();
+}
+
+class _PlayerState extends State<Player> {
+  double _position = 0;
+  bool _playing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      child: Column(
+        children: [
+          Slider(
+            onChanged: (double value) => setState(() => _position = value),
+            divisions: null,
+            value: _position,
+            max: 1,
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AssetButton(
+                onTap: () {},
+                asset: IconAsset.skipBackward,
+                width: 48,
+                height: 48,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              AssetButton(
+                onTap: () => setState(() => _playing = !_playing),
+                asset: !_playing ? IconAsset.play : IconAsset.pause,
+                width: 48,
+                height: 48,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              AssetButton(
+                onTap: () {},
+                asset: IconAsset.skipForward,
+                width: 48,
+                height: 48,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
 class LibraryRenderer extends StatefulWidget {
-  const LibraryRenderer({Key? key}) : super(key: key);
+  final Function(Track track) onPlay;
+
+  const LibraryRenderer({
+    required this.onPlay,
+    Key? key,
+  }) : super(key: key);
 
   @override
   _LibraryRendererState createState() => _LibraryRendererState();
@@ -51,6 +124,7 @@ class _LibraryRendererState extends State<LibraryRenderer> {
   late final Loader<Library> _library;
   String? _selectedArtist;
   Album? _selectedAlbum;
+  Track? _selectedTrack;
 
   @override
   void initState() {
@@ -73,6 +147,7 @@ class _LibraryRendererState extends State<LibraryRenderer> {
           child: Text(
             title,
             style: TextStyle(
+              color: selected ? Theme.of(context).colorScheme.primary : null,
               fontWeight: selected ? FontWeight.bold : null,
             ),
           ),
@@ -86,6 +161,7 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                     : artists.join(', ')
                 : '',
             style: TextStyle(
+              color: selected ? Theme.of(context).colorScheme.primary : null,
               fontWeight: selected ? FontWeight.bold : null,
             ),
           ),
@@ -211,12 +287,16 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                                 .map((track) => Card(
                                       clipBehavior: Clip.antiAlias,
                                       child: ListTile(
+                                        onTap: () => setState(() {
+                                          widget.onPlay(track);
+                                          _selectedTrack = track;
+                                        }),
                                         contentPadding:
                                             const EdgeInsets.all(10),
                                         title: _buildTitle(
                                           title: track.title,
                                           artists: track.artists,
-                                          selected: false,
+                                          selected: _selectedTrack == track,
                                         ),
                                       ),
                                     ))
