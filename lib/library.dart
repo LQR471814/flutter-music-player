@@ -1,8 +1,44 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter_media_metadata/flutter_media_metadata.dart';
-import 'package:music_player/utils.dart';
+import 'package:music_player/common/utils.dart';
 import 'package:path/path.dart';
+
+class Playlist {
+  final List<Track> tracks;
+  final bool loop;
+  final int current;
+
+  const Playlist({
+    required this.tracks,
+    this.current = 0,
+    this.loop = false,
+  });
+
+  Playlist queue(List<Track> tracks) => Playlist(
+        tracks: tracks..addAll(tracks),
+        loop: loop,
+        current: current,
+      );
+
+  Playlist at(int track) =>
+      Playlist(tracks: tracks, loop: loop, current: track);
+
+  Playlist looped(bool newLoop) =>
+      Playlist(tracks: tracks, loop: newLoop, current: current);
+
+  Playlist shuffle() {
+    final List<Track> newTracks = [];
+    final _random = Random();
+    while (tracks.isNotEmpty) {
+      final index = _random.nextInt(tracks.length);
+      newTracks.add(tracks[index]);
+      tracks.removeAt(index);
+    }
+    return Playlist(tracks: tracks, loop: loop, current: current);
+  }
+}
 
 class Track {
   final Metadata metadata;

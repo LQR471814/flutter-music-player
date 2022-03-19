@@ -1,10 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:music_player/async.dart';
+import 'package:music_player/common/async.dart';
+import 'package:music_player/common/components.dart';
 import 'package:music_player/icons.dart';
 import 'package:music_player/library.dart';
-import 'package:music_player/style.dart';
+import 'package:music_player/common/style.dart';
 import 'package:window_size/window_size.dart';
 
 void main() {
@@ -27,13 +28,24 @@ class Home extends StatelessWidget {
               primary: const Color.fromARGB(255, 217, 74, 61),
               brightness: Brightness.dark,
             ),
-        // primaryColorLight: const Color.fromARGB(200, 200, 200, 255),
-        // primaryColorDark: const Color.fromARGB(199, 169, 255, 157),
         fontFamily: 'Calibri',
         cardTheme: const CardTheme(
           elevation: 3,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadii.large,
+          ),
+        ),
+        textTheme: const TextTheme(
+          headline4: TextStyle(
+            fontSize: 30,
+            fontWeight: FontWeight.bold,
+          ),
+          headline5: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.bold,
+          ),
+          headline6: TextStyle(
+            fontSize: 18,
           ),
         ),
       ),
@@ -50,6 +62,20 @@ class Home extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class PlaylistRenderer extends StatelessWidget {
+  final Playlist playlist;
+
+  const PlaylistRenderer({
+    required this.playlist,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container();
   }
 }
 
@@ -82,28 +108,58 @@ class _PlayerState extends State<Player> {
               AssetButton(
                 onTap: () {},
                 asset: IconAsset.skipBackward,
-                width: 48,
-                height: 48,
-                color: Theme.of(context).colorScheme.primary,
+                size: 48,
               ),
               AssetButton(
                 onTap: () => setState(() => _playing = !_playing),
                 asset: !_playing ? IconAsset.play : IconAsset.pause,
-                width: 48,
-                height: 48,
-                color: Theme.of(context).colorScheme.primary,
+                size: 48,
               ),
               AssetButton(
                 onTap: () {},
                 asset: IconAsset.skipForward,
-                width: 48,
-                height: 48,
-                color: Theme.of(context).colorScheme.primary,
+                size: 48,
               ),
             ],
           ),
         ],
       ),
+    );
+  }
+}
+
+class AlbumCover extends StatelessWidget {
+  final Album album;
+  final BorderRadius? borderRadius;
+
+  const AlbumCover({
+    required this.album,
+    this.borderRadius,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: borderRadius ?? BorderRadii.medium,
+        boxShadow: album.cover != null ? [BoxShadows.regular(context)] : [],
+      ),
+      child: album.cover != null
+          ? ClipRRect(
+              child: Image.file(album.cover!),
+              borderRadius: borderRadius ?? BorderRadii.medium,
+            )
+          : LayoutBuilder(
+              builder: (context, constraints) => AssetIcon(
+                asset: IconAsset.album,
+                width: constraints.maxHeight,
+                height: constraints.maxHeight,
+                padding: EdgeInsets.symmetric(
+                  vertical: constraints.maxHeight / 8,
+                ),
+              ),
+            ),
     );
   }
 }
@@ -175,111 +231,144 @@ class _LibraryRendererState extends State<LibraryRenderer> {
     return EnsureLoaded<Library>(
       loader: _library,
       builder: (context, library) {
-        for (final album in library.albums) {
-          print('${album.artists.isNotEmpty ? album.artists : 'Unknown'} '
-              '${album.artists.length} - ${album.title}');
-        }
         return Divided(
-          axis: Axis.vertical,
+          axis: Axis.horizontal,
           children: [
-            Divided(
-              axis: Axis.horizontal,
+            ListView(
+              controller: ScrollController(),
+              padding: const EdgeInsets.all(20),
               children: [
-                ListView(
-                  controller: ScrollController(),
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    Card(
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
+                    selected: _selectedArtist == null,
+                    contentPadding: const EdgeInsets.all(10),
+                    onTap: () => setState(() => _selectedArtist = null),
+                    title: _buildTitle(
+                      title: 'All',
+                      selected: _selectedArtist == null,
+                    ),
+                  ),
+                ),
+                ...library.artists.map((artist) => Card(
                       clipBehavior: Clip.antiAlias,
                       child: ListTile(
-                        selected: _selectedArtist == null,
+                        selected: _selectedArtist == artist,
                         contentPadding: const EdgeInsets.all(10),
-                        onTap: () => setState(() => _selectedArtist = null),
+                        onTap: () => setState(() => _selectedArtist = artist),
                         title: _buildTitle(
-                          title: 'All',
-                          selected: _selectedArtist == null,
+                          title: artist,
+                          selected: _selectedArtist == artist,
                         ),
                       ),
-                    ),
-                    ...library.artists.map((artist) => Card(
-                          clipBehavior: Clip.antiAlias,
-                          child: ListTile(
-                            selected: _selectedArtist == artist,
-                            contentPadding: const EdgeInsets.all(10),
-                            onTap: () =>
-                                setState(() => _selectedArtist = artist),
-                            title: _buildTitle(
-                              title: artist,
-                              selected: _selectedArtist == artist,
-                            ),
-                          ),
-                        ))
-                  ],
-                ),
-                ListView(
-                  controller: ScrollController(),
-                  padding: const EdgeInsets.all(20),
-                  children: (_selectedArtist != null
-                          ? library.filterByArtist(
-                              library.albums, _selectedArtist!)
-                          : library.albums)
-                      .map((album) => Card(
-                            clipBehavior: Clip.antiAlias,
-                            child: ListTile(
-                              selected: _selectedAlbum == album,
-                              contentPadding: const EdgeInsets.all(10),
-                              onTap: () => setState(
-                                () => _selectedAlbum =
-                                    _selectedAlbum == album ? null : album,
-                              ),
-                              leading: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadii.medium,
-                                  boxShadow: album.cover != null
-                                      ? [
-                                          BoxShadow(
-                                            color:
-                                                Theme.of(context).shadowColor,
-                                            spreadRadius: -1,
-                                            blurRadius: 3,
-                                            offset: const Offset(0, 4),
-                                          )
-                                        ]
-                                      : [],
-                                ),
-                                child: album.cover != null
-                                    ? ClipRRect(
-                                        child: Image.file(album.cover!),
-                                        borderRadius: BorderRadii.medium,
-                                      )
-                                    : Container(
-                                        width: 48,
-                                        height: 48,
-                                        alignment: Alignment.center,
-                                        child: AssetIcon(
-                                          width: 42,
-                                          height: 42,
-                                          asset: IconAsset.album,
-                                        ),
-                                      ),
-                              ),
-                              title: _buildTitle(
-                                title: album.title,
-                                artists: album.artists,
-                                selected: _selectedAlbum == album,
-                              ),
-                            ),
-                          ))
-                      .toList(),
-                ),
+                    ))
               ],
+            ),
+            ListView(
+              controller: ScrollController(),
+              padding: const EdgeInsets.all(20),
+              children: (_selectedArtist != null
+                      ? library.filterByArtist(library.albums, _selectedArtist!)
+                      : library.albums)
+                  .map((album) => Card(
+                        clipBehavior: Clip.antiAlias,
+                        child: ListTile(
+                          selected: _selectedAlbum == album,
+                          contentPadding: const EdgeInsets.all(10),
+                          onTap: () => setState(
+                            () => _selectedAlbum =
+                                _selectedAlbum == album ? null : album,
+                          ),
+                          leading: AlbumCover(album: album),
+                          title: _buildTitle(
+                            title: album.title,
+                            artists: album.artists,
+                            selected: _selectedAlbum == album,
+                          ),
+                        ),
+                      ))
+                  .toList(),
             ),
             ...(_selectedAlbum != null
                 ? [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Column(
                       children: [
                         Expanded(
+                          flex: 2,
+                          child: AlbumCover(
+                            album: _selectedAlbum!,
+                            borderRadius: BorderRadii.large,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 40,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 15.0,
+                                ),
+                                child: AssetButton(
+                                  size: 50,
+                                  asset: IconAsset.play,
+                                  onTap: () {},
+                                ),
+                              ),
+                              Flexible(
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      _selectedAlbum!.title,
+                                      textAlign: TextAlign.center,
+                                      style:
+                                          Theme.of(context).textTheme.headline5,
+                                    ),
+                                    ...(_selectedAlbum!.artists.isNotEmpty
+                                        ? [
+                                            Text(
+                                              _selectedAlbum!.artists.join(','),
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .headline6,
+                                            )
+                                          ]
+                                        : []),
+                                  ],
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 15,
+                                ),
+                                child: Row(
+                                  children: [
+                                    PopupMenuActions(
+                                      tooltip: "Playlist actions",
+                                      actions: [
+                                        PopupAction(
+                                          label: 'Add to playlist',
+                                          iconAsset: IconAsset.playlistAdd,
+                                          onSelected: () {},
+                                        ),
+                                        PopupAction(
+                                          label: 'Edit metadata',
+                                          iconAsset: IconAsset.edit,
+                                          onSelected: () {},
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          flex: 3,
                           child: ListView(
                             controller: ScrollController(),
                             padding: const EdgeInsets.all(20),
@@ -303,6 +392,7 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                                 .toList(),
                           ),
                         ),
+                        const SizedBox(height: 10),
                       ],
                     )
                   ]
