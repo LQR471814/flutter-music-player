@@ -34,7 +34,8 @@ class TitledListView extends StatelessWidget {
         ...(subBar.isNotEmpty
             ? [
                 Padding(
-                  padding: titlePadding.add(const EdgeInsets.only(top: 15)),
+                  padding: titlePadding
+                      .add(const EdgeInsets.symmetric(vertical: 10)),
                   child: Row(children: subBar),
                 )
               ]

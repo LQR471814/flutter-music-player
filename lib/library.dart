@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_media_metadata/flutter_media_metadata.dart';
 import 'package:music_player/common/utils.dart';
+import 'package:music_player/interface.dart';
 import 'package:path/path.dart';
 
 class Playlist {
@@ -35,7 +36,7 @@ class Playlist {
       );
 
   Playlist queue(List<Track> newTracks) => Playlist(
-        tracks: tracks..addAll(newTracks),
+        tracks: tracks + newTracks,
         loop: loop,
         current: current,
       );
@@ -62,7 +63,6 @@ class Track {
   final Album belongsTo;
 
   final Metadata metadata;
-  final String path;
 
   final String title;
   final List<String> artists;
@@ -70,25 +70,15 @@ class Track {
   const Track({
     required this.belongsTo,
     required this.metadata,
-    required this.path,
     required this.title,
     this.artists = const [],
   });
 
-  static Future<Track?> fromEntry(FileSystemEntity file,
+  static Future<Track> fromEntry(DataStoreAudio audio,
       [Album? belongsTo]) async {
-    if (file is! File) {
-      return null;
-    }
-
-    final filename = getAudioFilename(file);
-    if (filename == null) {
-      return null;
-    }
-
-    final metadata = await MetadataRetriever.fromFile(file);
+    final metadata = await audio.metadata();
     final title = strip(metadata.trackName ?? '').isEmpty
-        ? filename
+        ? audio.name
         : metadata.trackName!;
 
     final List<String> artists =
@@ -99,7 +89,6 @@ class Track {
     if (belongsTo != null) {
       return Track(
         belongsTo: belongsTo,
-        path: file.path,
         metadata: metadata,
         title: title,
         artists: artists,
@@ -114,7 +103,6 @@ class Track {
     );
     final result = Track(
       belongsTo: defaultAlbum,
-      path: file.path,
       metadata: metadata,
       title: title,
       artists: artists,
@@ -139,11 +127,11 @@ class Album {
 }
 
 class Library {
-  final Directory root;
+  final DataStore store;
   final List<Album> albums = [];
 
-  Library(this.root) {
-    root.watch().listen((event) => _load());
+  Library(Directory root) : store = LocalStore(root) {
+    store.watch().listen((event) => _load());
   }
 
   Set<String> get artists {
@@ -179,20 +167,17 @@ class Library {
 
   Future<void> _load() async {
     albums.clear();
-    final items = await root.list().toList();
-    for (final entity in items) {
-      if (entity is File) {
-        final track = await Track.fromEntry(entity);
-        if (track == null) {
-          continue;
-        }
+    final items = await store.entries();
+    for (final entry in items) {
+      if (entry is DataStoreAudio) {
+        final track = await Track.fromEntry(entry);
         albums.add(track.belongsTo);
-      } else if (entity is Directory) {
+      } else if (entry is DataStoreFolder) {
         final album = Album(title: '', tracks: []);
 
-        for (final file in await entity.list().toList()) {
-          final track = await Track.fromEntry(file, album);
-          if (track != null) {
+        for (final entry in await entry.children()) {
+          if (entry is DataStoreAudio) {
+            final track = await Track.fromEntry(entry, album);
             album.tracks.add(track);
           }
         }
@@ -202,7 +187,7 @@ class Library {
         }
 
         Uint8List? albumArt;
-        String title = basename(entity.path);
+        String title = entry.name;
         final List<String> artists = [];
         for (var t in album.tracks) {
           if (t.metadata.albumArt != null && albumArt == null) {
@@ -222,9 +207,9 @@ class Library {
         album.title = title;
         album.artists = artists;
 
-        final cover = File(join(entity.path, 'cover.png'));
-        if (await cover.exists()) {
-          album.cover = await cover.readAsBytes();
+        final cover = await entry.cover();
+        if (cover != null) {
+          album.cover = cover;
         } else if (albumArt != null) {
           album.cover = albumArt;
         }

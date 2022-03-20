@@ -20,6 +20,8 @@ dependencies:
 
   flutter_media_metadata: ^1.0.0+1
   just_audio: ^0.9.20
+  just_audio_background: ^0.0.1-beta.5
+  just_audio_web: ^0.4.7
   flutter_svg: ^1.0.3
 
 dev_dependencies:

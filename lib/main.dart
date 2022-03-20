@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:music_player/common/async.dart';
 import 'package:music_player/common/components.dart';
 import 'package:music_player/common/utils.dart';
@@ -12,11 +13,13 @@ import 'package:window_size/window_size.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   setWindowTitle('Music Player');
-  runApp(const Home());
+  runApp(Home());
 }
 
 class Home extends StatelessWidget {
-  const Home({Key? key}) : super(key: key);
+  final AudioPlayer _player = AudioPlayer();
+
+  Home({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -57,10 +60,11 @@ class Home extends StatelessWidget {
       home: Scaffold(
         body: Column(
           children: [
-            const Player(),
+            Player(player: _player),
             Expanded(
               child: LibraryRenderer(
-                onPlay: (track) => print(track),
+                player: _player,
+                onPlay: (track) {},
               ),
             ),
           ],
@@ -71,7 +75,8 @@ class Home extends StatelessWidget {
 }
 
 class Player extends StatefulWidget {
-  const Player({Key? key}) : super(key: key);
+  final AudioPlayer player;
+  const Player({required this.player, Key? key}) : super(key: key);
 
   @override
   State<Player> createState() => _PlayerState();
@@ -140,7 +145,7 @@ class PlaylistRenderer extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 AssetIcon(
-                  asset: IconAsset.playlistAdd,
+                  asset: IconAsset.playlist,
                   color: Colors.white70,
                   width: 80,
                   height: 80,
@@ -299,9 +304,11 @@ class CardTrack extends StatelessWidget {
 }
 
 class LibraryRenderer extends StatefulWidget {
+  final AudioPlayer player;
   final Function(Track track) onPlay;
 
   const LibraryRenderer({
+    required this.player,
     required this.onPlay,
     Key? key,
   }) : super(key: key);
@@ -315,7 +322,7 @@ class _LibraryRendererState extends State<LibraryRenderer> {
   String? _selectedArtist;
   Album? _selectedAlbum;
   Track? _selectedTrack;
-  Playlist _currentPlaylist = const Playlist(tracks: []);
+  Playlist _playlist = const Playlist(tracks: []);
 
   @override
   void initState() {
@@ -387,9 +394,10 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                               ),
                               child: AssetButton(
                                 size: 50,
+                                tooltip: 'Play',
                                 asset: IconAsset.play,
                                 onTap: () => setState(() {
-                                  _currentPlaylist = _currentPlaylist
+                                  _playlist = _playlist
                                       .withTracks(_selectedAlbum!.tracks);
                                   _selectedAlbum = null;
                                 }),
@@ -430,7 +438,11 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                                       PopupAction(
                                         label: 'Add to playlist',
                                         iconAsset: IconAsset.playlistAdd,
-                                        onSelected: () {},
+                                        onSelected: () => setState(() {
+                                          _playlist = _playlist
+                                              .queue(_selectedAlbum!.tracks);
+                                          _selectedAlbum = null;
+                                        }),
                                       ),
                                       PopupAction(
                                         label: 'Edit metadata',
@@ -467,8 +479,8 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                     ],
                   )
                 : PlaylistRenderer(
-                    playlist: _currentPlaylist,
-                    onChange: (p) => setState(() => _currentPlaylist = p),
+                    playlist: _playlist,
+                    onChange: (p) => setState(() => _playlist = p),
                   ),
           ],
         );

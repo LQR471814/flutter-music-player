@@ -7,6 +7,7 @@ class IconAsset {
   static String pause = 'icons/pause-circle-fill.svg';
   static String skipForward = 'icons/skip-forward-fill.svg';
   static String skipBackward = 'icons/skip-back-fill.svg';
+  static String playlist = 'icons/play-list-fill.svg';
   static String playlistAdd = 'icons/play-list-add-line.svg';
   static String edit = 'icons/edit-2-fill.svg';
   static String delete = 'icons/delete-bin-5-fill.svg';
