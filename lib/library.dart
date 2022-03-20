@@ -3,59 +3,56 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_media_metadata/flutter_media_metadata.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:music_player/common/utils.dart';
 import 'package:music_player/interface.dart';
 import 'package:path/path.dart';
 
 class Playlist {
-  final List<Track> tracks;
-  final bool loop;
-  final int current;
+  final AudioPlayer player;
+  List<Track> _tracks;
+  int _playing;
+  bool _loop;
 
-  const Playlist({
-    required this.tracks,
-    this.current = -1,
-    this.loop = false,
-  });
+  Playlist({
+    required this.player,
+    List<Track> tracks = const [],
+    bool loop = false,
+  })  : _tracks = tracks,
+        _playing = -1,
+        _loop = loop;
 
-  Playlist clear() {
-    if (current < 0) {
-      return Playlist(tracks: [], loop: loop);
-    }
-    return Playlist(
-      tracks: [tracks[current]],
-      loop: loop,
-      current: 0,
-    );
+  bool get loop => _loop;
+  set loop(l) => _loop = l;
+
+  int get playing => _playing;
+  set playing(i) => _playing = i;
+
+  List<Track> get tracks => _tracks;
+  set tracks(t) {
+    _tracks = t;
   }
 
-  Playlist withTracks(List<Track> newTracks) => Playlist(
-        tracks: newTracks,
-        loop: loop,
-        current: current,
-      );
+  void clear() {
+    if (playing < 0 || playing >= tracks.length) {
+      tracks = <Track>[];
+      return;
+    }
+    tracks = [tracks[playing]];
+    playing = 0;
+  }
 
-  Playlist queue(List<Track> newTracks) => Playlist(
-        tracks: tracks + newTracks,
-        loop: loop,
-        current: current,
-      );
+  void queue(List<Track> append) => tracks = _tracks + append;
 
-  Playlist at(int track) =>
-      Playlist(tracks: tracks, loop: loop, current: track);
-
-  Playlist looped(bool newLoop) =>
-      Playlist(tracks: tracks, loop: newLoop, current: current);
-
-  Playlist shuffle() {
+  void shuffle() {
     final List<Track> newTracks = [];
     final _random = Random();
-    while (tracks.isNotEmpty) {
-      final index = _random.nextInt(tracks.length);
+    while (_tracks.isNotEmpty) {
+      final index = _random.nextInt(_tracks.length);
       newTracks.add(tracks[index]);
-      tracks.removeAt(index);
+      _tracks.removeAt(index);
     }
-    return Playlist(tracks: newTracks, loop: loop, current: current);
+    tracks = newTracks;
   }
 }
 

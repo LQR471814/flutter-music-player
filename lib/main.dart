@@ -126,7 +126,7 @@ class _PlayerState extends State<Player> {
 
 class PlaylistRenderer extends StatelessWidget {
   final Playlist playlist;
-  final void Function(Playlist playlist) onChange;
+  final void Function() onChange;
 
   const PlaylistRenderer({
     required this.playlist,
@@ -166,13 +166,19 @@ class PlaylistRenderer extends StatelessWidget {
                 size: 30,
                 asset: IconAsset.delete,
                 tooltip: 'Clear',
-                onTap: () => onChange(playlist.clear()),
+                onTap: () {
+                  playlist.clear();
+                  onChange();
+                },
               ),
               AssetButton(
                 size: 30,
                 asset: IconAsset.shuffle,
                 tooltip: 'Shuffle',
-                onTap: () => onChange(playlist.shuffle()),
+                onTap: () {
+                  playlist.shuffle();
+                  onChange();
+                },
               ),
               AssetButton(
                 size: 30,
@@ -180,16 +186,20 @@ class PlaylistRenderer extends StatelessWidget {
                     ? IconAsset.loopEnabled
                     : IconAsset.loopDisabled,
                 tooltip: !playlist.loop ? 'Enable looping' : 'Disable looping',
-                onTap: () => onChange(playlist.looped(!playlist.loop)),
+                onTap: () {
+                  playlist.loop = !playlist.loop;
+                  onChange();
+                },
               ),
             ], const SizedBox(width: 10)),
             children: [
               for (int i = 0; i < playlist.tracks.length; i++)
                 CardTrack(
-                  selected: i == playlist.current,
+                  selected: i == playlist.playing,
                   leading: AlbumCover(album: playlist.tracks[i].belongsTo),
                   title: playlist.tracks[i].title,
                   artists: playlist.tracks[i].artists,
+                  onTap: () {},
                 )
             ],
           );
@@ -322,13 +332,14 @@ class _LibraryRendererState extends State<LibraryRenderer> {
   String? _selectedArtist;
   Album? _selectedAlbum;
   Track? _selectedTrack;
-  Playlist _playlist = const Playlist(tracks: []);
+  late final Playlist _playlist;
 
   @override
   void initState() {
     _library = Loader(() => Library.load(
           Directory('C:\\Users\\bramb\\Music'),
         ));
+    _playlist = Playlist(player: widget.player, tracks: []);
     super.initState();
   }
 
@@ -341,6 +352,7 @@ class _LibraryRendererState extends State<LibraryRenderer> {
           axis: Axis.horizontal,
           children: [
             TitledListView(
+              //* Artist list
               title: 'Artists',
               children: [
                 CardTrack(
@@ -356,6 +368,7 @@ class _LibraryRendererState extends State<LibraryRenderer> {
               ],
             ),
             TitledListView(
+              //* Album list
               title: 'Albums',
               children: (_selectedArtist != null
                       ? library.filterByArtist(library.albums, _selectedArtist!)
@@ -370,7 +383,7 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                       ))
                   .toList(),
             ),
-            _selectedAlbum != null
+            _selectedAlbum != null //* Album selected view
                 ? Column(
                     children: [
                       Expanded(
@@ -397,8 +410,7 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                                 tooltip: 'Play',
                                 asset: IconAsset.play,
                                 onTap: () => setState(() {
-                                  _playlist = _playlist
-                                      .withTracks(_selectedAlbum!.tracks);
+                                  _playlist.tracks = _selectedAlbum!.tracks;
                                   _selectedAlbum = null;
                                 }),
                               ),
@@ -439,7 +451,7 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                                         label: 'Add to playlist',
                                         iconAsset: IconAsset.playlistAdd,
                                         onSelected: () => setState(() {
-                                          _playlist = _playlist
+                                          _playlist
                                               .queue(_selectedAlbum!.tracks);
                                           _selectedAlbum = null;
                                         }),
@@ -479,8 +491,9 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                     ],
                   )
                 : PlaylistRenderer(
+                    //* Playlist view
                     playlist: _playlist,
-                    onChange: (p) => setState(() => _playlist = p),
+                    onChange: () => setState(() {}),
                   ),
           ],
         );
