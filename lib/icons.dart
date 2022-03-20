@@ -9,6 +9,10 @@ class IconAsset {
   static String skipBackward = 'icons/skip-back-fill.svg';
   static String playlistAdd = 'icons/play-list-add-line.svg';
   static String edit = 'icons/edit-2-fill.svg';
+  static String delete = 'icons/delete-bin-5-fill.svg';
+  static String shuffle = 'icons/shuffle-line.svg';
+  static String loopDisabled = 'icons/refresh-line.svg';
+  static String loopEnabled = 'icons/refresh-fill.svg';
 }
 
 class AssetIcon extends StatelessWidget {

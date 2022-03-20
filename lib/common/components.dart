@@ -4,6 +4,53 @@ import 'package:flutter/material.dart';
 import 'package:music_player/common/style.dart';
 import 'package:music_player/icons.dart';
 
+class TitledListView extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+  final List<Widget> subBar;
+
+  const TitledListView({
+    required this.title,
+    required this.children,
+    this.subBar = const [],
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    const titlePadding = EdgeInsets.symmetric(horizontal: 25);
+    const listPadding = EdgeInsets.all(20);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: titlePadding,
+          child: Text(
+            title,
+            style: Theme.of(context).textTheme.headline3,
+          ),
+        ),
+        ...(subBar.isNotEmpty
+            ? [
+                Padding(
+                  padding: titlePadding.add(const EdgeInsets.only(top: 15)),
+                  child: Row(children: subBar),
+                )
+              ]
+            : []),
+        Expanded(
+          child: ListView(
+            controller: ScrollController(),
+            padding: listPadding,
+            children: children,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class Divided extends StatelessWidget {
   final List<Widget> children;
   final Axis axis;
@@ -106,6 +153,7 @@ class AssetButton extends StatelessWidget {
   final double size;
   final bool circular;
   final bool shadow;
+  final String tooltip;
 
   const AssetButton({
     required this.asset,
@@ -113,26 +161,30 @@ class AssetButton extends StatelessWidget {
     this.size = 24,
     this.circular = true,
     this.shadow = true,
+    this.tooltip = '',
     Key? key,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.all(Radius.circular(size)),
-      ),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          onTap: onTap,
-          child: Shadowed(
-            boxShadow: BoxShadows.regular(context),
-            child: AssetIcon(
-              width: size,
-              height: size,
-              asset: asset,
-              color: Theme.of(context).colorScheme.primary,
+    return Tooltip(
+      message: tooltip,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.all(Radius.circular(size)),
+        ),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: onTap,
+            child: Shadowed(
+              boxShadow: BoxShadows.regular(context),
+              child: AssetIcon(
+                width: size,
+                height: size,
+                asset: asset,
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ),
           ),
         ),

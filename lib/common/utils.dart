@@ -13,3 +13,8 @@ List<String> stripList(List<String> strings) => [
       for (final s in strings)
         if (strip(s).isNotEmpty) s
     ];
+
+List<T> joinWith<T>(List<T> items, T value) => [
+      for (int i = 0; i < items.length; i++)
+        if (i != 0) ...[value, items[i]] else items[i]
+    ];

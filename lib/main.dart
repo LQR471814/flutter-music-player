@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:music_player/common/async.dart';
 import 'package:music_player/common/components.dart';
+import 'package:music_player/common/utils.dart';
 import 'package:music_player/icons.dart';
 import 'package:music_player/library.dart';
 import 'package:music_player/common/style.dart';
@@ -36,6 +37,10 @@ class Home extends StatelessWidget {
           ),
         ),
         textTheme: const TextTheme(
+          headline3: TextStyle(
+            fontSize: 38,
+            fontWeight: FontWeight.bold,
+          ),
           headline4: TextStyle(
             fontSize: 30,
             fontWeight: FontWeight.bold,
@@ -62,20 +67,6 @@ class Home extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class PlaylistRenderer extends StatelessWidget {
-  final Playlist playlist;
-
-  const PlaylistRenderer({
-    required this.playlist,
-    Key? key,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container();
   }
 }
 
@@ -128,6 +119,78 @@ class _PlayerState extends State<Player> {
   }
 }
 
+class PlaylistRenderer extends StatelessWidget {
+  final Playlist playlist;
+  final void Function(Playlist playlist) onChange;
+
+  const PlaylistRenderer({
+    required this.playlist,
+    required this.onChange,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return playlist.tracks.isEmpty
+        ? Padding(
+            padding: const EdgeInsets.only(bottom: 80)
+                .add(const EdgeInsets.symmetric(horizontal: 60)),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                AssetIcon(
+                  asset: IconAsset.playlistAdd,
+                  color: Colors.white70,
+                  width: 80,
+                  height: 80,
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  "The playlist is currently empty",
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headline4,
+                ),
+              ],
+            ),
+          )
+        : TitledListView(
+            title: 'Playlist',
+            subBar: joinWith<Widget>([
+              AssetButton(
+                size: 30,
+                asset: IconAsset.delete,
+                tooltip: 'Clear',
+                onTap: () => onChange(playlist.clear()),
+              ),
+              AssetButton(
+                size: 30,
+                asset: IconAsset.shuffle,
+                tooltip: 'Shuffle',
+                onTap: () => onChange(playlist.shuffle()),
+              ),
+              AssetButton(
+                size: 30,
+                asset: playlist.loop
+                    ? IconAsset.loopEnabled
+                    : IconAsset.loopDisabled,
+                tooltip: !playlist.loop ? 'Enable looping' : 'Disable looping',
+                onTap: () => onChange(playlist.looped(!playlist.loop)),
+              ),
+            ], const SizedBox(width: 10)),
+            children: [
+              for (int i = 0; i < playlist.tracks.length; i++)
+                CardTrack(
+                  selected: i == playlist.current,
+                  leading: AlbumCover(album: playlist.tracks[i].belongsTo),
+                  title: playlist.tracks[i].title,
+                  artists: playlist.tracks[i].artists,
+                )
+            ],
+          );
+  }
+}
+
 class AlbumCover extends StatelessWidget {
   final Album album;
   final BorderRadius? borderRadius;
@@ -147,7 +210,7 @@ class AlbumCover extends StatelessWidget {
       ),
       child: album.cover != null
           ? ClipRRect(
-              child: Image.file(album.cover!),
+              child: Image.memory(album.cover!),
               borderRadius: borderRadius ?? BorderRadii.medium,
             )
           : LayoutBuilder(
@@ -160,6 +223,77 @@ class AlbumCover extends StatelessWidget {
                 ),
               ),
             ),
+    );
+  }
+}
+
+class CardTrack extends StatelessWidget {
+  final String title;
+  final void Function()? onTap;
+  final List<String>? artists;
+  final bool selected;
+  final Widget? leading;
+  final List<PopupAction>? menuActions;
+
+  const CardTrack({
+    required this.title,
+    this.onTap,
+    this.artists,
+    this.selected = false,
+    this.leading,
+    this.menuActions,
+    Key? key,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        selected: selected,
+        contentPadding: const EdgeInsets.all(10),
+        onTap: onTap,
+        leading: leading,
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color:
+                      selected ? Theme.of(context).colorScheme.primary : null,
+                  fontWeight: selected ? FontWeight.bold : null,
+                ),
+              ),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Text(
+                artists != null
+                    ? artists!.isEmpty
+                        ? 'Unknown Artist'
+                        : artists!.join(', ')
+                    : '',
+                style: TextStyle(
+                  color:
+                      selected ? Theme.of(context).colorScheme.primary : null,
+                  fontWeight: selected ? FontWeight.bold : null,
+                ),
+              ),
+            ),
+            ...(menuActions != null
+                ? [
+                    PopupMenuActions(
+                      actions: menuActions!,
+                      tooltip: 'Track options',
+                    ),
+                  ]
+                : [])
+          ],
+        ),
+      ),
     );
   }
 }
@@ -181,6 +315,7 @@ class _LibraryRendererState extends State<LibraryRenderer> {
   String? _selectedArtist;
   Album? _selectedAlbum;
   Track? _selectedTrack;
+  Playlist _currentPlaylist = const Playlist(tracks: []);
 
   @override
   void initState() {
@@ -188,42 +323,6 @@ class _LibraryRendererState extends State<LibraryRenderer> {
           Directory('C:\\Users\\bramb\\Music'),
         ));
     super.initState();
-  }
-
-  Widget _buildTitle({
-    required String title,
-    required bool selected,
-    List<String>? artists,
-  }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        const SizedBox(width: 5),
-        Expanded(
-          child: Text(
-            title,
-            style: TextStyle(
-              color: selected ? Theme.of(context).colorScheme.primary : null,
-              fontWeight: selected ? FontWeight.bold : null,
-            ),
-          ),
-        ),
-        const SizedBox(width: 20),
-        Expanded(
-          child: Text(
-            artists != null
-                ? artists.isEmpty
-                    ? 'Unknown Artist'
-                    : artists.join(', ')
-                : '',
-            style: TextStyle(
-              color: selected ? Theme.of(context).colorScheme.primary : null,
-              fontWeight: selected ? FontWeight.bold : null,
-            ),
-          ),
-        )
-      ],
-    );
   }
 
   @override
@@ -234,169 +333,143 @@ class _LibraryRendererState extends State<LibraryRenderer> {
         return Divided(
           axis: Axis.horizontal,
           children: [
-            ListView(
-              controller: ScrollController(),
-              padding: const EdgeInsets.all(20),
+            TitledListView(
+              title: 'Artists',
               children: [
-                Card(
-                  clipBehavior: Clip.antiAlias,
-                  child: ListTile(
-                    selected: _selectedArtist == null,
-                    contentPadding: const EdgeInsets.all(10),
-                    onTap: () => setState(() => _selectedArtist = null),
-                    title: _buildTitle(
-                      title: 'All',
-                      selected: _selectedArtist == null,
-                    ),
-                  ),
+                CardTrack(
+                  title: 'All',
+                  selected: _selectedArtist == null,
+                  onTap: () => setState(() => _selectedArtist = null),
                 ),
-                ...library.artists.map((artist) => Card(
-                      clipBehavior: Clip.antiAlias,
-                      child: ListTile(
-                        selected: _selectedArtist == artist,
-                        contentPadding: const EdgeInsets.all(10),
-                        onTap: () => setState(() => _selectedArtist = artist),
-                        title: _buildTitle(
-                          title: artist,
-                          selected: _selectedArtist == artist,
-                        ),
-                      ),
+                ...library.artists.map((artist) => CardTrack(
+                      title: artist,
+                      selected: _selectedArtist == artist,
+                      onTap: () => setState(() => _selectedArtist = artist),
                     ))
               ],
             ),
-            ListView(
-              controller: ScrollController(),
-              padding: const EdgeInsets.all(20),
+            TitledListView(
+              title: 'Albums',
               children: (_selectedArtist != null
                       ? library.filterByArtist(library.albums, _selectedArtist!)
                       : library.albums)
-                  .map((album) => Card(
-                        clipBehavior: Clip.antiAlias,
-                        child: ListTile(
-                          selected: _selectedAlbum == album,
-                          contentPadding: const EdgeInsets.all(10),
-                          onTap: () => setState(
-                            () => _selectedAlbum =
-                                _selectedAlbum == album ? null : album,
-                          ),
-                          leading: AlbumCover(album: album),
-                          title: _buildTitle(
-                            title: album.title,
-                            artists: album.artists,
-                            selected: _selectedAlbum == album,
-                          ),
-                        ),
+                  .map((album) => CardTrack(
+                        title: album.title,
+                        artists: album.artists,
+                        leading: AlbumCover(album: album),
+                        selected: _selectedAlbum == album,
+                        onTap: () => setState(() => _selectedAlbum =
+                            _selectedAlbum == album ? null : album),
                       ))
                   .toList(),
             ),
-            ...(_selectedAlbum != null
-                ? [
-                    Column(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: AlbumCover(
-                            album: _selectedAlbum!,
-                            borderRadius: BorderRadii.large,
-                          ),
+            _selectedAlbum != null
+                ? Column(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: AlbumCover(
+                          album: _selectedAlbum!,
+                          borderRadius: BorderRadii.large,
                         ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 40,
-                            vertical: 10,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 15.0,
-                                ),
-                                child: AssetButton(
-                                  size: 50,
-                                  asset: IconAsset.play,
-                                  onTap: () {},
-                                ),
-                              ),
-                              Flexible(
-                                child: Column(
-                                  children: [
-                                    Text(
-                                      _selectedAlbum!.title,
-                                      textAlign: TextAlign.center,
-                                      style:
-                                          Theme.of(context).textTheme.headline5,
-                                    ),
-                                    ...(_selectedAlbum!.artists.isNotEmpty
-                                        ? [
-                                            Text(
-                                              _selectedAlbum!.artists.join(','),
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .headline6,
-                                            )
-                                          ]
-                                        : []),
-                                  ],
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 15,
-                                ),
-                                child: Row(
-                                  children: [
-                                    PopupMenuActions(
-                                      tooltip: "Playlist actions",
-                                      actions: [
-                                        PopupAction(
-                                          label: 'Add to playlist',
-                                          iconAsset: IconAsset.playlistAdd,
-                                          onSelected: () {},
-                                        ),
-                                        PopupAction(
-                                          label: 'Edit metadata',
-                                          iconAsset: IconAsset.edit,
-                                          onSelected: () {},
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 40,
+                          vertical: 10,
                         ),
-                        Expanded(
-                          flex: 3,
-                          child: ListView(
-                            controller: ScrollController(),
-                            padding: const EdgeInsets.all(20),
-                            children: _selectedAlbum!.tracks
-                                .map((track) => Card(
-                                      clipBehavior: Clip.antiAlias,
-                                      child: ListTile(
-                                        onTap: () => setState(() {
-                                          widget.onPlay(track);
-                                          _selectedTrack = track;
-                                        }),
-                                        contentPadding:
-                                            const EdgeInsets.all(10),
-                                        title: _buildTitle(
-                                          title: track.title,
-                                          artists: track.artists,
-                                          selected: _selectedTrack == track,
-                                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 15.0,
+                              ),
+                              child: AssetButton(
+                                size: 50,
+                                asset: IconAsset.play,
+                                onTap: () => setState(() {
+                                  _currentPlaylist = _currentPlaylist
+                                      .withTracks(_selectedAlbum!.tracks);
+                                  _selectedAlbum = null;
+                                }),
+                              ),
+                            ),
+                            Flexible(
+                              child: Column(
+                                children: [
+                                  Text(
+                                    _selectedAlbum!.title,
+                                    textAlign: TextAlign.center,
+                                    style:
+                                        Theme.of(context).textTheme.headline5,
+                                  ),
+                                  ...(_selectedAlbum!.artists.isNotEmpty
+                                      ? [
+                                          Text(
+                                            _selectedAlbum!.artists.join(','),
+                                            textAlign: TextAlign.center,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .headline6,
+                                          )
+                                        ]
+                                      : []),
+                                ],
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 15,
+                              ),
+                              child: Row(
+                                children: [
+                                  PopupMenuActions(
+                                    tooltip: 'Playlist options',
+                                    actions: [
+                                      PopupAction(
+                                        label: 'Add to playlist',
+                                        iconAsset: IconAsset.playlistAdd,
+                                        onSelected: () {},
                                       ),
-                                    ))
-                                .toList(),
-                          ),
+                                      PopupAction(
+                                        label: 'Edit metadata',
+                                        iconAsset: IconAsset.edit,
+                                        onSelected: () {},
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 10),
-                      ],
-                    )
-                  ]
-                : []),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: ListView(
+                          controller: ScrollController(),
+                          padding: const EdgeInsets.all(20),
+                          children: _selectedAlbum!.tracks
+                              .map((track) => CardTrack(
+                                    title: track.title,
+                                    artists: track.artists,
+                                    selected: _selectedTrack == track,
+                                    onTap: () => setState(() {
+                                      widget.onPlay(track);
+                                      _selectedTrack = track;
+                                    }),
+                                  ))
+                              .toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                  )
+                : PlaylistRenderer(
+                    playlist: _currentPlaylist,
+                    onChange: (p) => setState(() => _currentPlaylist = p),
+                  ),
           ],
         );
       },

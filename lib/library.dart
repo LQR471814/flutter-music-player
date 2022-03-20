@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter_media_metadata/flutter_media_metadata.dart';
 import 'package:music_player/common/utils.dart';
@@ -12,12 +13,29 @@ class Playlist {
 
   const Playlist({
     required this.tracks,
-    this.current = 0,
+    this.current = -1,
     this.loop = false,
   });
 
-  Playlist queue(List<Track> tracks) => Playlist(
-        tracks: tracks..addAll(tracks),
+  Playlist clear() {
+    if (current < 0) {
+      return Playlist(tracks: [], loop: loop);
+    }
+    return Playlist(
+      tracks: [tracks[current]],
+      loop: loop,
+      current: 0,
+    );
+  }
+
+  Playlist withTracks(List<Track> newTracks) => Playlist(
+        tracks: newTracks,
+        loop: loop,
+        current: current,
+      );
+
+  Playlist queue(List<Track> newTracks) => Playlist(
+        tracks: tracks..addAll(newTracks),
         loop: loop,
         current: current,
       );
@@ -36,11 +54,13 @@ class Playlist {
       newTracks.add(tracks[index]);
       tracks.removeAt(index);
     }
-    return Playlist(tracks: tracks, loop: loop, current: current);
+    return Playlist(tracks: newTracks, loop: loop, current: current);
   }
 }
 
 class Track {
+  final Album belongsTo;
+
   final Metadata metadata;
   final String path;
 
@@ -48,13 +68,15 @@ class Track {
   final List<String> artists;
 
   const Track({
+    required this.belongsTo,
     required this.metadata,
     required this.path,
     required this.title,
     this.artists = const [],
   });
 
-  static Future<Track?> fromEntry(FileSystemEntity file) async {
+  static Future<Track?> fromEntry(FileSystemEntity file,
+      [Album? belongsTo]) async {
     if (file is! File) {
       return null;
     }
@@ -69,22 +91,44 @@ class Track {
         ? filename
         : metadata.trackName!;
 
-    return Track(
+    final List<String> artists =
+        stripList(metadata.trackArtistNames ?? []).isNotEmpty
+            ? metadata.trackArtistNames!
+            : [];
+
+    if (belongsTo != null) {
+      return Track(
+        belongsTo: belongsTo,
+        path: file.path,
+        metadata: metadata,
+        title: title,
+        artists: artists,
+      );
+    }
+
+    final defaultAlbum = Album(
+      title: title,
+      artists: artists,
+      tracks: [],
+      cover: metadata.albumArt,
+    );
+    final result = Track(
+      belongsTo: defaultAlbum,
       path: file.path,
       metadata: metadata,
       title: title,
-      artists: stripList(metadata.trackArtistNames ?? []).isNotEmpty
-          ? metadata.trackArtistNames!
-          : [],
+      artists: artists,
     );
+    defaultAlbum.tracks.add(result);
+    return result;
   }
 }
 
 class Album {
-  final String title;
-  final List<Track> tracks;
-  final List<String> artists;
-  final File? cover;
+  String title;
+  List<Track> tracks;
+  List<String> artists;
+  Uint8List? cover;
 
   Album({
     required this.title,
@@ -142,54 +186,50 @@ class Library {
         if (track == null) {
           continue;
         }
-
-        final title = track.metadata.albumName ?? '';
-        final artists = track.metadata.albumArtistName ?? '';
-
-        final name = title.isNotEmpty ? title : getAudioFilename(entity);
-        if (name == null) {
-          continue;
-        }
-
-        albums.add(Album(
-          title: name,
-          artists: artists.isNotEmpty ? [artists] : [],
-          tracks: [track],
-        ));
+        albums.add(track.belongsTo);
       } else if (entity is Directory) {
-        final cover = File(join(entity.path, 'cover.png'));
+        final album = Album(title: '', tracks: []);
 
-        final List<Track> tracks = [];
         for (final file in await entity.list().toList()) {
-          final track = await Track.fromEntry(file);
+          final track = await Track.fromEntry(file, album);
           if (track != null) {
-            tracks.add(track);
+            album.tracks.add(track);
           }
         }
 
-        if (tracks.isEmpty) {
+        if (album.tracks.isEmpty) {
           continue;
         }
 
-        var title = '';
+        Uint8List? albumArt;
+        String title = basename(entity.path);
         final List<String> artists = [];
-        for (var t in tracks) {
+        for (var t in album.tracks) {
+          if (t.metadata.albumArt != null && albumArt == null) {
+            albumArt = t.metadata.albumArt;
+          }
           if (t.metadata.albumArtistName != null &&
               strip(t.metadata.albumArtistName!).isNotEmpty) {
             artists.add(t.metadata.albumArtistName!);
           }
-          if (t.metadata.albumName != null) {
+          if (t.metadata.albumName != null &&
+              t.metadata.albumName!.isNotEmpty) {
             title = t.metadata.albumName!;
             break;
           }
         }
 
-        albums.add(Album(
-          title: title.isNotEmpty ? title : basename(entity.path),
-          artists: artists,
-          cover: await cover.exists() ? cover : null,
-          tracks: tracks,
-        ));
+        album.title = title;
+        album.artists = artists;
+
+        final cover = File(join(entity.path, 'cover.png'));
+        if (await cover.exists()) {
+          album.cover = await cover.readAsBytes();
+        } else if (albumArt != null) {
+          album.cover = albumArt;
+        }
+
+        albums.add(album);
       }
     }
   }
