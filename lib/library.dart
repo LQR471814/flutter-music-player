@@ -1,17 +1,22 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_media_metadata/flutter_media_metadata.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:music_player/common/utils.dart';
 import 'package:music_player/interface.dart';
 import 'package:path/path.dart';
+import 'package:uuid/uuid.dart';
 
 class Playlist {
+  final StreamController<void> _updateController =
+      StreamController<void>.broadcast();
   final AudioPlayer player;
   List<Track> _tracks;
-  int _playing;
+  int _current;
   bool _loop;
 
   Playlist({
@@ -19,60 +24,166 @@ class Playlist {
     List<Track> tracks = const [],
     bool loop = false,
   })  : _tracks = tracks,
-        _playing = -1,
+        _current = -1,
         _loop = loop;
 
-  bool get loop => _loop;
-  set loop(l) => _loop = l;
-
-  int get playing => _playing;
-  set playing(i) => _playing = i;
-
   List<Track> get tracks => _tracks;
-  set tracks(t) {
-    _tracks = t;
+  set tracks(t) => _tracks = List.from(t);
+
+  Stream<void> get onUpdate => _updateController.stream;
+
+  Track? get current =>
+      _current >= 0 && _current < _tracks.length ? _tracks[_current] : null;
+
+  bool get loop => _loop;
+  set loop(l) {
+    _loop = l;
+    _updateController.add(null);
+  }
+
+  void _mutatePlayer(void Function() callback) {
+    player.pause();
+    callback();
+    player.play();
+  }
+
+  void _play() {
+    player.setAudioSource(_tracks[_current].audio);
+  }
+
+  void play([int start = 0]) {
+    if (_tracks.isEmpty) {
+      return;
+    }
+    _current = start;
+    _mutatePlayer(() {
+      _play();
+      player.positionStream.listen((event) {
+        if (player.duration != null) {
+          if (event >= player.duration!) {
+            if (!next() && loop) {
+              _mutatePlayer(() {
+                _current = 0;
+                _play();
+              });
+              player.durationFuture
+                  ?.then((value) => _updateController.add(null));
+            } else if (!loop) {
+              player.pause();
+              _current = 0;
+              _updateController.add(null);
+            }
+          }
+        }
+      });
+    });
+    _updateController.add(null);
+  }
+
+  void pause() => player.pause();
+
+  bool hasPrevious() => _current - 1 >= 0 && _current < _tracks.length;
+
+  bool previous() {
+    if (hasPrevious()) {
+      _mutatePlayer(() {
+        _current--;
+        _play();
+      });
+      _updateController.add(null);
+      return true;
+    }
+    return false;
+  }
+
+  bool hasNext() => _current + 1 < _tracks.length && _current >= 0;
+
+  bool next() {
+    if (hasNext()) {
+      _mutatePlayer(() {
+        _current++;
+        _play();
+      });
+      _updateController.add(null);
+      return true;
+    }
+    return false;
   }
 
   void clear() {
-    if (playing < 0 || playing >= tracks.length) {
-      tracks = <Track>[];
+    if (_tracks.isEmpty) {
       return;
     }
-    tracks = [tracks[playing]];
-    playing = 0;
+    if (!player.playing) {
+      _tracks = <Track>[];
+      _current = -1;
+      _updateController.add(null);
+      return;
+    }
+    _tracks = [_tracks[_current]];
+    _current = 0;
+    _updateController.add(null);
   }
 
-  void queue(List<Track> append) => tracks = _tracks + append;
+  void add(List<Track> append) {
+    _tracks = _tracks + append;
+    _updateController.add(null);
+  }
 
   void shuffle() {
+    final Track? playedTrack = current != null ? _tracks[_current] : null;
+
     final List<Track> newTracks = [];
     final _random = Random();
     while (_tracks.isNotEmpty) {
       final index = _random.nextInt(_tracks.length);
-      newTracks.add(tracks[index]);
+      newTracks.add(_tracks[index]);
       _tracks.removeAt(index);
     }
-    tracks = newTracks;
+    _tracks = newTracks;
+
+    if (playedTrack != null) {
+      _current = _tracks.indexOf(playedTrack);
+    }
+
+    _updateController.add(null);
   }
 }
 
 class Track {
   final Album belongsTo;
+  final DataStoreAudio data;
 
   final Metadata metadata;
-
   final String title;
   final List<String> artists;
 
-  const Track({
+  final AudioSource audio;
+
+  Track({
     required this.belongsTo,
+    required this.data,
     required this.metadata,
     required this.title,
     this.artists = const [],
-  });
+  }) : audio = ProgressiveAudioSource(
+          data.uri,
+          tag: MediaItem(
+            id: const Uuid().v4(),
+            title: title,
+            artist: artists.join(', '),
+            genre: metadata.genre,
+            album: belongsTo.title,
+            artUri: belongsTo.cover != null
+                ? Uri.dataFromBytes(belongsTo.cover!)
+                : null,
+          ),
+        );
 
-  static Future<Track> fromEntry(DataStoreAudio audio,
-      [Album? belongsTo]) async {
+  static Future<Track> fromEntry(
+    DataStoreAudio audio, [
+    Album? belongsTo,
+  ]) async {
     final metadata = await audio.metadata();
     final title = strip(metadata.trackName ?? '').isEmpty
         ? audio.name
@@ -89,6 +200,7 @@ class Track {
         metadata: metadata,
         title: title,
         artists: artists,
+        data: audio,
       );
     }
 
@@ -103,6 +215,7 @@ class Track {
       metadata: metadata,
       title: title,
       artists: artists,
+      data: audio,
     );
     defaultAlbum.tracks.add(result);
     return result;

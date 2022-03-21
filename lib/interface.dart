@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:path/path.dart';
 import 'package:flutter_media_metadata/flutter_media_metadata.dart';
 
-const List<String> supportedAudio = ["mp3", "wav"];
+const List<String> supportedAudio = ["mp3", "wav", "m4a"];
 const List<String> supportedImages = [
   "jpeg",
   "jpg",
@@ -30,9 +30,9 @@ abstract class DataStoreAudio implements DataStoreEntry {
   @override
   late final String name;
   late final String fileExtension;
+  late final Uri uri;
 
   Future<Metadata> metadata();
-  Future<Uint8List> audio();
 }
 
 abstract class DataStore {
@@ -91,6 +91,8 @@ class LocalAudio implements DataStoreAudio {
   late final String name;
   @override
   late final String fileExtension;
+  @override
+  late final Uri uri;
 
   final File file;
 
@@ -98,16 +100,20 @@ class LocalAudio implements DataStoreAudio {
     required this.name,
     required this.fileExtension,
     required this.file,
-  });
-
-  LocalAudio.fromFile(this.file) {
-    final split = getSplitName(file);
-    name = split[0];
-    fileExtension = split[1];
+  }) {
+    uri = Uri(scheme: 'file', path: file.path);
   }
 
-  @override
-  Future<Uint8List> audio() => file.readAsBytes();
+  static const int maxBits = 128;
+
+  static LocalAudio fromFile(File file) {
+    final split = getSplitName(file);
+    return LocalAudio(
+      name: split[0],
+      fileExtension: split[1],
+      file: file,
+    );
+  }
 
   @override
   Future<Metadata> metadata() => MetadataRetriever.fromFile(file);

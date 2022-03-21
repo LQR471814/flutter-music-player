@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:music_player/common/async.dart';
 import 'package:music_player/common/components.dart';
 import 'package:music_player/common/utils.dart';
@@ -10,14 +13,19 @@ import 'package:music_player/library.dart';
 import 'package:music_player/common/style.dart';
 import 'package:window_size/window_size.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   setWindowTitle('Music Player');
+  await JustAudioBackground.init(
+    androidNotificationChannelId: 'com.ryanheise.bg_demo.channel.audio',
+    androidNotificationChannelName: 'Audio playback',
+    androidNotificationOngoing: true,
+  );
   runApp(Home());
 }
 
 class Home extends StatelessWidget {
-  final AudioPlayer _player = AudioPlayer();
+  final playlist = Playlist(player: AudioPlayer());
 
   Home({Key? key}) : super(key: key);
 
@@ -60,10 +68,12 @@ class Home extends StatelessWidget {
       home: Scaffold(
         body: Column(
           children: [
-            Player(player: _player),
+            Player(
+              playlist: playlist,
+            ),
             Expanded(
               child: LibraryRenderer(
-                player: _player,
+                playlist: playlist,
                 onPlay: (track) {},
               ),
             ),
@@ -75,68 +85,222 @@ class Home extends StatelessWidget {
 }
 
 class Player extends StatefulWidget {
-  final AudioPlayer player;
-  const Player({required this.player, Key? key}) : super(key: key);
+  final Playlist playlist;
+  const Player({required this.playlist, Key? key}) : super(key: key);
 
   @override
   State<Player> createState() => _PlayerState();
 }
 
 class _PlayerState extends State<Player> {
-  double _position = 0;
+  final List<StreamSubscription> subscriptions = [];
+  Duration _position = const Duration();
   bool _playing = false;
+  bool _previouslyEnabled = false;
+
+  @override
+  void initState() {
+    subscriptions.add(
+      widget.playlist.onUpdate.listen((event) => setState(() {
+            if (!widget.playlist.player.playing &&
+                widget.playlist.current == null) {
+              _playing = false;
+              _position = const Duration();
+            }
+          })),
+    );
+    subscriptions.add(
+      widget.playlist.player.positionStream.listen((event) {
+        _playing = widget.playlist.player.playing;
+        if (widget.playlist.player.duration != null) {
+          setState(() {
+            _position = event;
+          });
+        }
+      }),
+    );
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    for (final s in subscriptions) {
+      s.cancel();
+    }
+    super.dispose();
+  }
+
+  bool get controlsEnabled => widget.playlist.current != null;
+
+  bool sliderEnabled() =>
+      widget.playlist.player.duration != null && controlsEnabled;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final current = widget.playlist.current;
+    return Padding(
       padding: const EdgeInsets.all(15),
-      child: Column(
-        children: [
-          Slider(
-            onChanged: (double value) => setState(() => _position = value),
-            divisions: null,
-            value: _position,
-            max: 1,
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AssetButton(
-                onTap: () {},
-                asset: IconAsset.skipBackward,
-                size: 48,
+      child: LayoutBuilder(builder: (context, constraints) {
+        return Row(
+          children: [
+            ...(current != null
+                ? [
+                    ConstrainedBox(
+                      constraints:
+                          BoxConstraints(maxWidth: constraints.maxWidth / 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            height: 80,
+                            child: AlbumCover(
+                              album: current.belongsTo,
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          Flexible(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  current.title,
+                                  style: Theme.of(context).textTheme.headline5,
+                                ),
+                                Text(
+                                  current.artists.isEmpty
+                                      ? "Unknown Artist"
+                                      : current.artists.join(', '),
+                                  style: Theme.of(context).textTheme.headline6,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                        ],
+                      ),
+                    ),
+                  ]
+                : []),
+            Expanded(
+              child: Column(
+                children: [
+                  Slider(
+                    onChangeStart: (double value) {
+                      if (sliderEnabled()) {
+                        _previouslyEnabled = widget.playlist.player.playing;
+                        if (_previouslyEnabled) {
+                          widget.playlist.player.pause();
+                        }
+                      }
+                    },
+                    onChangeEnd: (double value) {
+                      if (sliderEnabled()) {
+                        widget.playlist.player
+                            .seek(widget.playlist.player.duration! * value);
+                        if (_previouslyEnabled) {
+                          widget.playlist.player.play();
+                        }
+                      }
+                    },
+                    onChanged: (double value) {
+                      if (sliderEnabled()) {
+                        setState(() {
+                          _position = widget.playlist.player.duration! * value;
+                        });
+                      }
+                    },
+                    value: (widget.playlist.player.duration != null
+                            ? _position.inMilliseconds /
+                                widget.playlist.player.duration!.inMilliseconds
+                            : 0)
+                        .clamp(0, 1)
+                        .toDouble(),
+                    max: 1,
+                  ),
+                  Stack(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 25),
+                        child: Text(
+                          timestamp(_position),
+                          style: Theme.of(context).textTheme.headline5,
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          AssetButton(
+                            active: widget.playlist.hasPrevious(),
+                            onTap: () => widget.playlist.previous(),
+                            asset: IconAsset.skipBackward,
+                            size: 48,
+                          ),
+                          AssetButton(
+                            active: controlsEnabled,
+                            onTap: () => setState(() {
+                              if (widget.playlist.player.playing) {
+                                widget.playlist.pause();
+                                return;
+                              }
+                              widget.playlist.player.play();
+                            }),
+                            asset: !_playing ? IconAsset.play : IconAsset.pause,
+                            size: 48,
+                          ),
+                          AssetButton(
+                            active: widget.playlist.hasNext(),
+                            onTap: () => widget.playlist.next(),
+                            asset: IconAsset.skipForward,
+                            size: 48,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              AssetButton(
-                onTap: () => setState(() => _playing = !_playing),
-                asset: !_playing ? IconAsset.play : IconAsset.pause,
-                size: 48,
-              ),
-              AssetButton(
-                onTap: () {},
-                asset: IconAsset.skipForward,
-                size: 48,
-              ),
-            ],
-          ),
-        ],
-      ),
+            ),
+          ],
+        );
+      }),
     );
   }
 }
 
-class PlaylistRenderer extends StatelessWidget {
+class PlaylistRenderer extends StatefulWidget {
   final Playlist playlist;
-  final void Function() onChange;
 
   const PlaylistRenderer({
     required this.playlist,
-    required this.onChange,
     Key? key,
   }) : super(key: key);
 
   @override
+  State<PlaylistRenderer> createState() => _PlaylistRendererState();
+}
+
+class _PlaylistRendererState extends State<PlaylistRenderer> {
+  final List<StreamSubscription> subscriptions = [];
+
+  @override
+  void initState() {
+    subscriptions.add(
+      widget.playlist.onUpdate.listen((event) => setState(() {})),
+    );
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    for (final s in subscriptions) {
+      s.cancel();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return playlist.tracks.isEmpty
+    return widget.playlist.tracks.isEmpty
         ? Padding(
             padding: const EdgeInsets.only(bottom: 80)
                 .add(const EdgeInsets.symmetric(horizontal: 60)),
@@ -166,40 +330,37 @@ class PlaylistRenderer extends StatelessWidget {
                 size: 30,
                 asset: IconAsset.delete,
                 tooltip: 'Clear',
-                onTap: () {
-                  playlist.clear();
-                  onChange();
-                },
+                onTap: () => widget.playlist.clear(),
               ),
               AssetButton(
                 size: 30,
                 asset: IconAsset.shuffle,
                 tooltip: 'Shuffle',
                 onTap: () {
-                  playlist.shuffle();
-                  onChange();
+                  widget.playlist.shuffle();
                 },
               ),
               AssetButton(
                 size: 30,
-                asset: playlist.loop
+                asset: widget.playlist.loop
                     ? IconAsset.loopEnabled
                     : IconAsset.loopDisabled,
-                tooltip: !playlist.loop ? 'Enable looping' : 'Disable looping',
-                onTap: () {
-                  playlist.loop = !playlist.loop;
-                  onChange();
-                },
+                tooltip: !widget.playlist.loop
+                    ? 'Enable looping'
+                    : 'Disable looping',
+                onTap: () => widget.playlist.loop = !widget.playlist.loop,
               ),
             ], const SizedBox(width: 10)),
             children: [
-              for (int i = 0; i < playlist.tracks.length; i++)
+              for (final track in widget.playlist.tracks)
                 CardTrack(
-                  selected: i == playlist.playing,
-                  leading: AlbumCover(album: playlist.tracks[i].belongsTo),
-                  title: playlist.tracks[i].title,
-                  artists: playlist.tracks[i].artists,
-                  onTap: () {},
+                  selected: widget.playlist.current == track,
+                  leading: AlbumCover(album: track.belongsTo),
+                  title: track.title,
+                  artists: track.artists,
+                  onTap: () {
+                    widget.playlist.play(widget.playlist.tracks.indexOf(track));
+                  },
                 )
             ],
           );
@@ -234,7 +395,7 @@ class AlbumCover extends StatelessWidget {
                 width: constraints.maxHeight,
                 height: constraints.maxHeight,
                 padding: EdgeInsets.symmetric(
-                  vertical: constraints.maxHeight / 8,
+                  vertical: constraints.maxHeight / 16,
                 ),
               ),
             ),
@@ -314,11 +475,11 @@ class CardTrack extends StatelessWidget {
 }
 
 class LibraryRenderer extends StatefulWidget {
-  final AudioPlayer player;
+  final Playlist playlist;
   final Function(Track track) onPlay;
 
   const LibraryRenderer({
-    required this.player,
+    required this.playlist,
     required this.onPlay,
     Key? key,
   }) : super(key: key);
@@ -331,15 +492,12 @@ class _LibraryRendererState extends State<LibraryRenderer> {
   late final Loader<Library> _library;
   String? _selectedArtist;
   Album? _selectedAlbum;
-  Track? _selectedTrack;
-  late final Playlist _playlist;
 
   @override
   void initState() {
     _library = Loader(() => Library.load(
           Directory('C:\\Users\\bramb\\Music'),
         ));
-    _playlist = Playlist(player: widget.player, tracks: []);
     super.initState();
   }
 
@@ -410,7 +568,9 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                                 tooltip: 'Play',
                                 asset: IconAsset.play,
                                 onTap: () => setState(() {
-                                  _playlist.tracks = _selectedAlbum!.tracks;
+                                  widget.playlist.tracks =
+                                      _selectedAlbum!.tracks;
+                                  widget.playlist.play();
                                   _selectedAlbum = null;
                                 }),
                               ),
@@ -451,8 +611,8 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                                         label: 'Add to playlist',
                                         iconAsset: IconAsset.playlistAdd,
                                         onSelected: () => setState(() {
-                                          _playlist
-                                              .queue(_selectedAlbum!.tracks);
+                                          widget.playlist
+                                              .add(_selectedAlbum!.tracks);
                                           _selectedAlbum = null;
                                         }),
                                       ),
@@ -478,10 +638,12 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                               .map((track) => CardTrack(
                                     title: track.title,
                                     artists: track.artists,
-                                    selected: _selectedTrack == track,
                                     onTap: () => setState(() {
-                                      widget.onPlay(track);
-                                      _selectedTrack = track;
+                                      widget.playlist.add([track]);
+                                      widget.playlist.play(
+                                        widget.playlist.tracks.length - 1,
+                                      );
+                                      _selectedAlbum = null;
                                     }),
                                   ))
                               .toList(),
@@ -492,8 +654,7 @@ class _LibraryRendererState extends State<LibraryRenderer> {
                   )
                 : PlaylistRenderer(
                     //* Playlist view
-                    playlist: _playlist,
-                    onChange: () => setState(() {}),
+                    playlist: widget.playlist,
                   ),
           ],
         );

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:music_player/common/components.dart';
+import 'package:music_player/common/style.dart';
 
 class IconAsset {
   static String album = 'icons/album-fill.svg';
@@ -34,13 +36,16 @@ class AssetIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: padding,
-      child: SvgPicture.asset(
-        asset,
-        color: color ?? Theme.of(context).primaryColor,
-        width: width,
-        height: height,
+    return Shadowed(
+      boxShadow: BoxShadows.regular(context),
+      child: Padding(
+        padding: padding,
+        child: SvgPicture.asset(
+          asset,
+          color: color ?? Theme.of(context).primaryColor,
+          width: width,
+          height: height,
+        ),
       ),
     );
   }

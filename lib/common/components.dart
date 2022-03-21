@@ -34,8 +34,9 @@ class TitledListView extends StatelessWidget {
         ...(subBar.isNotEmpty
             ? [
                 Padding(
-                  padding: titlePadding
-                      .add(const EdgeInsets.symmetric(vertical: 10)),
+                  padding: titlePadding.add(
+                    const EdgeInsets.symmetric(vertical: 10),
+                  ),
                   child: Row(children: subBar),
                 )
               ]
@@ -151,6 +152,7 @@ class AssetButton extends StatelessWidget {
   final String asset;
   final void Function() onTap;
 
+  final bool active;
   final double size;
   final bool circular;
   final bool shadow;
@@ -159,6 +161,7 @@ class AssetButton extends StatelessWidget {
   const AssetButton({
     required this.asset,
     required this.onTap,
+    this.active = true,
     this.size = 24,
     this.circular = true,
     this.shadow = true,
@@ -175,17 +178,20 @@ class AssetButton extends StatelessWidget {
           borderRadius: BorderRadius.all(Radius.circular(size)),
         ),
         child: MouseRegion(
-          cursor: SystemMouseCursors.click,
+          cursor: active ? SystemMouseCursors.click : SystemMouseCursors.basic,
           child: GestureDetector(
-            onTap: onTap,
-            child: Shadowed(
-              boxShadow: BoxShadows.regular(context),
-              child: AssetIcon(
-                width: size,
-                height: size,
-                asset: asset,
-                color: Theme.of(context).colorScheme.primary,
-              ),
+            onTap: () {
+              if (active) {
+                onTap();
+              }
+            },
+            child: AssetIcon(
+              width: size,
+              height: size,
+              asset: asset,
+              color: active
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).primaryColor,
             ),
           ),
         ),
