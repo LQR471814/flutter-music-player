@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:stack_trace/stack_trace.dart';
 import 'package:flutter_media_metadata/flutter_media_metadata.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
@@ -11,21 +12,72 @@ import 'package:music_player/interface.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 
+//? SafePlayer is an AudioPlayer that can be mutated freely
+//? it is also designed so you can call mutate() inside the
+//? mutate callback safely
+class SafePlayer {
+  final AudioPlayer player;
+  int _locks = 0;
+
+  SafePlayer(this.player);
+
+  void mutate(void Function() callback) {
+    if (_locks == 0) {
+      player.pause();
+      _locks++;
+    }
+    callback();
+    _locks--;
+    if (_locks == 0) {
+      player.play();
+    }
+  }
+}
+
 class Playlist {
   final StreamController<void> _updateController =
       StreamController<void>.broadcast();
-  final AudioPlayer player;
+  final SafePlayer safePlayer;
+  get player => safePlayer.player;
+
   List<Track> _tracks;
   int _current;
   bool _loop;
 
   Playlist({
-    required this.player,
+    required AudioPlayer player,
     List<Track> tracks = const [],
     bool loop = false,
-  })  : _tracks = tracks,
+  })  : safePlayer = SafePlayer(player),
+        _tracks = tracks,
         _current = -1,
-        _loop = loop;
+        _loop = loop {
+    player
+        .createPositionStream(
+      minPeriod: const Duration(milliseconds: 500),
+      maxPeriod: const Duration(milliseconds: 500),
+    )
+        .listen((event) {
+      if (player.duration == null || !player.playing) {
+        return;
+      }
+      if (event >= player.duration!) {
+        final hasNext = next();
+        if (!hasNext && _loop) {
+          safePlayer.mutate(() {
+            _current = 0;
+            _updateSource();
+          });
+          player.durationFuture?.then((value) => _updateController.add(null));
+        } else if (!hasNext && !_loop) {
+          _current = 0;
+          player.pause();
+          _updateSource();
+          _updateController.add(null);
+        }
+      }
+    });
+  }
 
   List<Track> get tracks => _tracks;
   set tracks(t) => _tracks = List.from(t);
@@ -41,13 +93,7 @@ class Playlist {
     _updateController.add(null);
   }
 
-  void _mutatePlayer(void Function() callback) {
-    player.pause();
-    callback();
-    player.play();
-  }
-
-  void _play() {
+  void _updateSource() {
     player.setAudioSource(_tracks[_current].audio);
   }
 
@@ -56,27 +102,11 @@ class Playlist {
       return;
     }
     _current = start;
-    _mutatePlayer(() {
-      _play();
-      player.positionStream.listen((event) {
-        if (player.duration != null) {
-          if (event >= player.duration!) {
-            if (!next() && loop) {
-              _mutatePlayer(() {
-                _current = 0;
-                _play();
-              });
-              player.durationFuture
-                  ?.then((value) => _updateController.add(null));
-            } else if (!loop) {
-              player.pause();
-              _current = 0;
-              _updateController.add(null);
-            }
-          }
-        }
-      });
+
+    safePlayer.mutate(() {
+      _updateSource();
     });
+
     _updateController.add(null);
   }
 
@@ -86,9 +116,9 @@ class Playlist {
 
   bool previous() {
     if (hasPrevious()) {
-      _mutatePlayer(() {
+      safePlayer.mutate(() {
         _current--;
-        _play();
+        _updateSource();
       });
       _updateController.add(null);
       return true;
@@ -100,9 +130,9 @@ class Playlist {
 
   bool next() {
     if (hasNext()) {
-      _mutatePlayer(() {
+      safePlayer.mutate(() {
         _current++;
-        _play();
+        _updateSource();
       });
       _updateController.add(null);
       return true;
