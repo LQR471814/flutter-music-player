@@ -65,6 +65,9 @@ class Home extends StatelessWidget {
             fontSize: 18,
           ),
         ),
+        tooltipTheme: const TooltipThemeData(
+          showDuration: Duration.zero,
+        ),
       ),
       home: Scaffold(
         body: Column(
@@ -234,6 +237,7 @@ class _PlayerState extends State<Player> {
                             active: widget.playlist.hasPrevious(),
                             onTap: () => widget.playlist.previous(),
                             asset: IconAsset.skipBackward,
+                            tooltip: "Previous",
                             size: 48,
                           ),
                           AssetButton(
@@ -246,12 +250,14 @@ class _PlayerState extends State<Player> {
                               widget.playlist.player.play();
                             }),
                             asset: !_playing ? IconAsset.play : IconAsset.pause,
+                            tooltip: !_playing ? "Play" : "Pause",
                             size: 48,
                           ),
                           AssetButton(
                             active: widget.playlist.hasNext(),
                             onTap: () => widget.playlist.next(),
                             asset: IconAsset.skipForward,
+                            tooltip: "Next",
                             size: 48,
                           ),
                         ],
