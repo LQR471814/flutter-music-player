@@ -1,4 +1,4 @@
-## music_player
+## music player
 
 ***A cross-platform music player built with flutter.***
 
