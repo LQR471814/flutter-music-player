@@ -502,9 +502,13 @@ class _LibraryRendererState extends State<LibraryRenderer> {
 
   @override
   void initState() {
-    _library = Loader(() => Library.load(
-          Directory('C:\\Users\\bramb\\Music'),
-        ));
+    _library = Loader(() async {
+      final dir = await home();
+      print(dir);
+      return Library.load(
+        Directory(dir),
+      );
+    });
     super.initState();
   }
 

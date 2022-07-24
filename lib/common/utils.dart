@@ -1,3 +1,8 @@
+import 'dart:io';
+import "package:path/path.dart" as p;
+
+import 'package:path_provider/path_provider.dart';
+
 String strip(String s) {
   final matches = RegExp(r'(\s*)([^\s]*)(\s*)', unicode: true).allMatches(s);
   var result = '';
@@ -36,4 +41,14 @@ String timestamp(Duration duration) {
     return "$hours:${minuteStr.padLeft(2, '0')}:$secondStr";
   }
   return "$minuteStr:$secondStr";
+}
+
+Future<String> home() async {
+  if (Platform.isMacOS || Platform.isLinux) {
+    return Future.value(p.join(Platform.environment["HOME"]!, "Music"));
+  } else if (Platform.isWindows) {
+    return Future.value(p.join(Platform.environment["UserProfile"]!, "Music"));
+  }
+  final dir = await getApplicationDocumentsDirectory();
+  return dir.path;
 }
